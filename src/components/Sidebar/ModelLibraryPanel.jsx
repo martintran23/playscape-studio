@@ -1,4 +1,5 @@
 import useSceneStore from "../../store/sceneStore";
+import useLocationStore from "../../store/locationStore";
 
 function ModelLibraryPanel() {
   const models = useSceneStore((state) => state.models);
@@ -7,12 +8,24 @@ function ModelLibraryPanel() {
   const selectedObjectId = useSceneStore((state) => state.selectedObjectId);
   const rotateSelected = useSceneStore((state) => state.rotateSelected);
   const removeSelected = useSceneStore((state) => state.removeSelected);
+  const transformMode = useSceneStore((state) => state.transformMode);
+  const setTransformMode = useSceneStore((state) => state.setTransformMode);
+  const saveScene = useSceneStore((state) => state.saveScene);
+  const loadScene = useSceneStore((state) => state.loadScene);
+  const selectedLocation = useLocationStore((state) => state.selectedLocation);
+  const terrainVerticalExaggeration = useSceneStore((state) => state.terrainVerticalExaggeration);
+  const setTerrainVerticalExaggeration = useSceneStore((state) => state.setTerrainVerticalExaggeration);
 
   return (
     <aside className="w-72 border-r border-slate-200 bg-white p-4">
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-slate-900">PlayScape Studio</h1>
         <p className="mt-1 text-sm text-slate-500">Choose a model, then click ground to place.</p>
+        {selectedLocation ? (
+          <p className="mt-2 rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">
+            {selectedLocation.name} ({selectedLocation.latitude.toFixed(3)}, {selectedLocation.longitude.toFixed(3)})
+          </p>
+        ) : null}
       </div>
 
       <section>
@@ -37,11 +50,51 @@ function ModelLibraryPanel() {
         </div>
       </section>
 
+      <section className="mt-8">
+        <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Terrain relief</h2>
+        <label htmlFor="terrain-exag" className="flex flex-col gap-1 text-sm text-slate-600">
+          <span className="flex justify-between">
+            <span>Vertical exaggeration</span>
+            <span className="tabular-nums text-slate-800">{terrainVerticalExaggeration.toFixed(2)}×</span>
+          </span>
+          <input
+            id="terrain-exag"
+            type="range"
+            min={0.25}
+            max={4}
+            step={0.05}
+            value={terrainVerticalExaggeration}
+            onChange={(e) => setTerrainVerticalExaggeration(Number(e.target.value))}
+            className="w-full accent-blue-600"
+          />
+        </label>
+      </section>
+
       <section className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">Selected Object</h2>
         <p className="mt-2 text-sm text-slate-600">
           {selectedObjectId ? `ID: ${selectedObjectId.slice(0, 8)}...` : "Select any placed object"}
         </p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setTransformMode("translate")}
+            className={`rounded-md px-3 py-2 text-sm ${
+              transformMode === "translate" ? "bg-blue-600 text-white" : "bg-white text-slate-700"
+            }`}
+          >
+            Move
+          </button>
+          <button
+            type="button"
+            onClick={() => setTransformMode("rotate")}
+            className={`rounded-md px-3 py-2 text-sm ${
+              transformMode === "rotate" ? "bg-blue-600 text-white" : "bg-white text-slate-700"
+            }`}
+          >
+            Rotate
+          </button>
+        </div>
         <div className="mt-3 flex gap-2">
           <button
             type="button"
@@ -60,6 +113,15 @@ function ModelLibraryPanel() {
             Delete
           </button>
         </div>
+        <div className="mt-3 flex gap-2">
+          <button type="button" onClick={saveScene} className="flex-1 rounded-md bg-emerald-600 px-3 py-2 text-sm text-white">
+            Save
+          </button>
+          <button type="button" onClick={loadScene} className="flex-1 rounded-md bg-indigo-600 px-3 py-2 text-sm text-white">
+            Load
+          </button>
+        </div>
+        <p className="mt-3 text-xs text-slate-500">Snap: 0.5m translate, 22.5deg rotate. Items cannot overlap and must stay in bounds.</p>
       </section>
     </aside>
   );

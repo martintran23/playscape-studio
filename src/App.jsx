@@ -1,14 +1,14 @@
-import ModelLibraryPanel from "./components/Sidebar/ModelLibraryPanel";
-import ParkScene from "./components/Scene/ParkScene";
+import { Navigate, Route, Routes } from "react-router-dom";
+import EditorPage from "./pages/EditorPage";
+import LocationSelectionPage from "./pages/LocationSelectionPage";
 
 function App() {
   return (
-    <main className="flex h-full w-full">
-      <ModelLibraryPanel />
-      <section className="flex-1">
-        <ParkScene />
-      </section>
-    </main>
+    <Routes>
+      <Route path="/" element={<LocationSelectionPage />} />
+      <Route path="/editor" element={<EditorPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 
