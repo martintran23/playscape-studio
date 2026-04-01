@@ -1,6 +1,7 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid, Sky, useGLTF } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 import PlacedObject from "../Model/PlacedObject";
 import useSceneStore from "../../store/sceneStore";
 import useLocationStore from "../../store/locationStore";
@@ -9,6 +10,7 @@ import { computeStitchLayout, worldXZToLatLng } from "../../utils/stitchGeorefer
 import { getTerrainHeightAt } from "../../utils/terrainRaycast";
 import TerrainGround from "../TerrainGround";
 import LocationEnvironment3D from "../LocationEnvironment3D";
+import BackdropSatellite from "../BackdropSatellite";
 
 const MAP_ZOOM = 18;
 const NATIVE_TILE_PX = 256;
@@ -18,7 +20,7 @@ function TerrainLodPanController({ orbitRef, stitchedGroundSize, onLodChange, on
   const { camera } = useThree();
   const frame = useRef(0);
   const cooldown = useRef(0);
-  const lastLodRef = useRef({ tileGrid: 5, segments: 240 });
+  const lastLodRef = useRef({ tileGrid: 9, segments: 240 });
 
   useFrame(() => {
     if (!orbitRef.current) return;
@@ -28,8 +30,8 @@ function TerrainLodPanController({ orbitRef, stitchedGroundSize, onLodChange, on
     const dist = camera.position.distanceTo(target);
 
     if (frame.current % 12 === 0) {
-      const tileGrid = dist > 150 ? 7 : 5;
-      const segments = dist > 125 ? 128 : dist > 60 ? 192 : 256;
+      const tileGrid = dist > 220 ? 11 : 9;
+      const segments = dist > 180 ? 128 : dist > 90 ? 192 : 256;
       if (tileGrid !== lastLodRef.current.tileGrid || segments !== lastLodRef.current.segments) {
         lastLodRef.current = { tileGrid, segments };
         onLodChange({ tileGrid, segments });
@@ -63,6 +65,8 @@ function TerrainLodPanController({ orbitRef, stitchedGroundSize, onLodChange, on
 
 function ParkSceneContent({
   effectiveLocation,
+  mapCenterLat,
+  mapCenterLng,
   groundSize,
   stitchLayout,
   lodSegments,
@@ -80,20 +84,23 @@ function ParkSceneContent({
   handleLodChange,
 }) {
   const orbitRef = useRef(null);
+  const fogNear = Math.min(220, 48 + groundSize * 0.22);
+  const fogFar = Math.max(720, groundSize * 2.8);
 
   return (
     <>
       <color attach="background" args={["#f8fafc"]} />
-      <fog attach="fog" args={["#d8ecff", 120, 560]} />
+      <fog attach="fog" args={["#d8ecff", fogNear, fogFar]} />
       <Sky distance={450000} sunPosition={[10, 12, 5]} inclination={0.5} azimuth={0.2} />
       <ambientLight intensity={0.72} />
       <directionalLight position={[16, 22, 10]} intensity={1.2} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-      <mesh position={[0, -0.25, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[groundSize * 3.2, groundSize * 3.2]} />
-        <meshStandardMaterial color="#7aa867" />
-      </mesh>
+      <BackdropSatellite
+        centerLat={mapCenterLat ?? effectiveLocation.latitude}
+        centerLng={mapCenterLng ?? effectiveLocation.longitude}
+        groundSize={groundSize}
+      />
       <Grid
-        args={[groundSize + 12, groundSize + 12]}
+        args={[groundSize + 28, groundSize + 28]}
         cellSize={1}
         cellThickness={0.7}
         sectionSize={5}
@@ -165,7 +172,7 @@ function ParkScene({ location, initialCameraPosition = [8, 8, 8] }) {
   const terrainVerticalExaggeration = useSceneStore((state) => state.terrainVerticalExaggeration);
   const terrainMesh = useSceneStore((state) => state.terrainMesh);
 
-  const [lodTileGrid, setLodTileGrid] = useState(5);
+  const [lodTileGrid, setLodTileGrid] = useState(9);
   const [lodSegments, setLodSegments] = useState(240);
   const [terrainLoading, setTerrainLoading] = useState(false);
 
@@ -212,9 +219,15 @@ function ParkScene({ location, initialCameraPosition = [8, 8, 8] }) {
 
   return (
     <div className="h-full w-full">
-      <Canvas shadows camera={{ position: initialCameraPosition, fov: 50 }} onPointerMissed={() => selectObject(null)}>
+      <Canvas
+        shadows={{ type: THREE.PCFShadowMap }}
+        camera={{ position: initialCameraPosition, fov: 50 }}
+        onPointerMissed={() => selectObject(null)}
+      >
         <ParkSceneContent
           effectiveLocation={effectiveLocation}
+          mapCenterLat={mapCenterLat}
+          mapCenterLng={mapCenterLng}
           groundSize={groundSize}
           stitchLayout={stitchLayout}
           lodSegments={lodSegments}

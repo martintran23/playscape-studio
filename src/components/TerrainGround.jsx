@@ -42,8 +42,8 @@ function applyStitchUv(geometry, layout) {
     const vz = pos.getZ(i);
     const px = pxRef + (vx / ws) * canvasW;
     const py = pyRef - (vz / ws) * canvasH;
-    const u = px / canvasW;
-    const v = 1 - py / canvasH;
+    const u = THREE.MathUtils.clamp(px / canvasW, 0, 1);
+    const v = THREE.MathUtils.clamp(1 - py / canvasH, 0, 1);
     uv.setXY(i, u, v);
   }
   uv.needsUpdate = true;
@@ -100,6 +100,7 @@ function TerrainGround({
     if (!layoutValid(stitchLayout) || !worldSizeMeters) {
       setDemPayload(null);
       setSatTexture(null);
+      setIsLoading(false);
       return undefined;
     }
 
@@ -109,6 +110,11 @@ function TerrainGround({
     const run = async () => {
       setIsLoading(true);
       setDemPayload(null);
+      setSatTexture(null);
+      if (satTextureRef.current) {
+        satTextureRef.current.dispose();
+        satTextureRef.current = null;
+      }
 
       try {
         const z = zoom;
@@ -157,35 +163,48 @@ function TerrainGround({
         await Promise.all(tasks);
         if (cancelled) return;
 
-        const { data, width, height } = demCtx.getImageData(0, 0, canvasW, canvasH);
-        const mid = Math.floor(canvasW / 2);
-        const midIdx = (mid * width + mid) * 4;
-        const baseElevation = decodeTerrainRgbElevation(data[midIdx], data[midIdx + 1], data[midIdx + 2]);
+        let demPayloadNext = null;
+        try {
+          const { data, width, height } = demCtx.getImageData(0, 0, canvasW, canvasH);
+          const mid = Math.floor(canvasW / 2);
+          const midIdx = (mid * width + mid) * 4;
+          const baseElevation = decodeTerrainRgbElevation(data[midIdx], data[midIdx + 1], data[midIdx + 2]);
 
-        if (failedDemTiles.length) {
-          for (const { dx, dy } of failedDemTiles) {
-            fillDemTileFlat(demCtx, dx, dy, baseElevation);
+          if (failedDemTiles.length) {
+            for (const { dx, dy } of failedDemTiles) {
+              fillDemTileFlat(demCtx, dx, dy, baseElevation);
+            }
           }
+
+          const demFinal = demCtx.getImageData(0, 0, canvasW, canvasH);
+          demPayloadNext = {
+            data: new Uint8ClampedArray(demFinal.data),
+            width: demFinal.width,
+            height: demFinal.height,
+            baseElevation,
+          };
+        } catch (demErr) {
+          console.warn("TerrainGround: could not read DEM pixels (tainted canvas or browser policy). Showing satellite only, flat height.", demErr);
         }
 
-        const demFinal = demCtx.getImageData(0, 0, canvasW, canvasH);
-
-        const tex = new THREE.Texture(satCanvas);
+        const tex = new THREE.CanvasTexture(satCanvas);
         tex.needsUpdate = true;
         tex.wrapS = THREE.ClampToEdgeWrapping;
         tex.wrapT = THREE.ClampToEdgeWrapping;
-        tex.anisotropy = 8;
+        // Stitch sizes are not power-of-two (e.g. 9×256); mipmaps break sampling on many GPUs.
+        tex.generateMipmaps = false;
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.anisotropy = 4;
         tex.colorSpace = THREE.SRGBColorSpace;
-        if (satTextureRef.current) satTextureRef.current.dispose();
+        if (cancelled) {
+          tex.dispose();
+          return;
+        }
         satTextureRef.current = tex;
         setSatTexture(tex);
 
-        setDemPayload({
-          data: new Uint8ClampedArray(demFinal.data),
-          width: demFinal.width,
-          height: demFinal.height,
-          baseElevation,
-        });
+        setDemPayload(demPayloadNext);
       } catch (error) {
         if (!cancelled) {
           console.error("TerrainGround stitch failed:", error);
@@ -201,15 +220,21 @@ function TerrainGround({
 
     return () => {
       cancelled = true;
+    };
+  }, [stitchLayout]);
+
+  useEffect(
+    () => () => {
       if (satTextureRef.current) {
         satTextureRef.current.dispose();
         satTextureRef.current = null;
       }
-    };
-  }, [stitchLayout]);
+    },
+    [],
+  );
 
   useEffect(() => {
-    if (!demPayload || !geometry || !layoutValid(stitchLayout)) return;
+    if (!demPayload?.data || !geometry || !layoutValid(stitchLayout)) return;
     applyDisplacement(geometry, stitchLayout, demPayload, verticalExaggeration);
   }, [demPayload, geometry, stitchLayout, verticalExaggeration]);
 
@@ -234,7 +259,11 @@ function TerrainGround({
   return (
     <group>
       <mesh ref={bindMesh} geometry={geometry} receiveShadow onClick={onPlaceObject}>
-        <meshStandardMaterial map={satTexture ?? null} color={satTexture ? "#ffffff" : "#d1d5db"} />
+        <meshStandardMaterial
+          key={satTexture ? satTexture.uuid : "sat-pending"}
+          map={satTexture ?? null}
+          color={satTexture ? "#ffffff" : "#d1d5db"}
+        />
       </mesh>
       {isLoading ? (
         <mesh position={[0, 2, 0]}>

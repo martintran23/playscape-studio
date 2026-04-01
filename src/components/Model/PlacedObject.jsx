@@ -1,17 +1,9 @@
-import { Suspense, lazy, useMemo, useRef } from "react";
+import { Suspense, lazy, useRef } from "react";
 import { TransformControls } from "@react-three/drei";
 import useSceneStore from "../../store/sceneStore";
 import { getTerrainHeightAt } from "../../utils/terrainRaycast";
 
-const SlideModel = lazy(() => import("./SlideModel"));
-const SwingModel = lazy(() => import("./SwingModel"));
-const SeesawModel = lazy(() => import("./SeesawModel"));
-
-const MODEL_COMPONENTS = {
-  slide: SlideModel,
-  swing: SwingModel,
-  seesaw: SeesawModel,
-};
+const ModelAsset = lazy(() => import("./ModelAsset"));
 
 function PlacedObject({ object, model }) {
   const groupRef = useRef(null);
@@ -25,7 +17,6 @@ function PlacedObject({ object, model }) {
   const terrainMesh = useSceneStore((state) => state.terrainMesh);
 
   const isSelected = selectedObjectId === object.id;
-  const ModelComponent = useMemo(() => MODEL_COMPONENTS[model.id], [model.id]);
 
   const meshContent = (
     <group
@@ -38,7 +29,11 @@ function PlacedObject({ object, model }) {
       }}
     >
       <Suspense fallback={null}>
-        <ModelComponent modelPath={model.modelPath} scale={model.scale} />
+        <ModelAsset
+          modelPath={model.modelPath}
+          scale={model.scale}
+          fitMaxDimensionMeters={model.fitMaxDimensionMeters}
+        />
       </Suspense>
       {isSelected ? (
         <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>

@@ -1,6 +1,15 @@
 import useSceneStore from "../../store/sceneStore";
 import useLocationStore from "../../store/locationStore";
 
+function modelFileLabel(modelPath) {
+  const base = modelPath.split("/").pop() ?? modelPath;
+  try {
+    return decodeURIComponent(base);
+  } catch {
+    return base;
+  }
+}
+
 function ModelLibraryPanel() {
   const models = useSceneStore((state) => state.models);
   const activeModelId = useSceneStore((state) => state.activeModelId);
@@ -43,7 +52,7 @@ function ModelLibraryPanel() {
                 }`}
               >
                 <p className="text-sm font-medium">{model.name}</p>
-                <p className="text-xs text-slate-500">{model.modelPath}</p>
+                <p className="text-xs text-slate-500">{modelFileLabel(model.modelPath)}</p>
               </button>
             );
           })}

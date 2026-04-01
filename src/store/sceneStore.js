@@ -7,30 +7,72 @@ import {
   normalizeTransform,
 } from "../utils/sceneRules";
 
+/** Files in /public/models/ — use encodeURIComponent for names with spaces. */
+function publicModel(fileName) {
+  return `/models/${encodeURIComponent(fileName)}`;
+}
+
+/**
+ * Playground equipment catalog. GLBs live in public/models/.
+ *
+ * `fitMaxDimensionMeters` — largest axis of the model’s bounding box is scaled to this many meters
+ * (sources mix cm/m/arbitrary units). Multiply with `scale` for fine-tuning.
+ * `radius` — rough placement footprint (meters) for overlap checks.
+ */
 const MODEL_LIBRARY = [
   {
     id: "slide",
-    name: "Play Slide",
-    modelPath: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/ToyCar/glTF-Binary/ToyCar.glb",
+    name: "Slide",
+    modelPath: publicModel("Slide.glb"),
     color: "#f97316",
-    radius: 1.25,
-    scale: 0.5,
+    fitMaxDimensionMeters: 7,
+    radius: 3,
+    scale: 1,
   },
   {
     id: "swing",
-    name: "Swing Set",
-    modelPath: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Monster/glTF-Binary/Monster.glb",
+    name: "Swing set",
+    modelPath: publicModel("Swing set.glb"),
     color: "#22c55e",
-    radius: 1.1,
-    scale: 0.4,
+    fitMaxDimensionMeters: 4.5,
+    radius: 2.5,
+    scale: 1,
   },
   {
     id: "seesaw",
     name: "Seesaw",
-    modelPath: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Duck/glTF-Binary/Duck.glb",
+    modelPath: publicModel("Seesaw.glb"),
     color: "#3b82f6",
-    radius: 1.0,
-    scale: 0.03,
+    fitMaxDimensionMeters: 4.5,
+    radius: 2,
+    scale: 1,
+  },
+  {
+    id: "jungleGym",
+    name: "Jungle gym",
+    modelPath: publicModel("Jungle gym.glb"),
+    color: "#a855f7",
+    fitMaxDimensionMeters: 11,
+    radius: 4.5,
+    scale: 1,
+  },
+  {
+    id: "playStructure",
+    name: "Play structure",
+    modelPath: publicModel("Play Structure.glb"),
+    color: "#eab308",
+    fitMaxDimensionMeters: 16,
+    radius: 6.5,
+    scale: 1,
+  },
+  {
+    id: "basketballCourt",
+    name: "Basketball court",
+    modelPath: publicModel("Basketball court.glb"),
+    color: "#ea580c",
+    fitMaxDimensionMeters: 22,
+    radius: 12,
+    scale: 1,
   },
 ];
 

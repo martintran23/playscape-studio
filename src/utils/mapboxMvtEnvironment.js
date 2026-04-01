@@ -12,7 +12,16 @@ export function getMapboxStreetsV8TileUrl(z, x, y) {
     console.error("Missing Mapbox token for vector tiles.");
     return "";
   }
-  return `https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/${z}/${x}/${y}.vector.pbf?access_token=${MAPBOX_TOKEN}`;
+  return `https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/${z}/${x}/${y}.mvt?access_token=${MAPBOX_TOKEN}`;
+}
+
+/** Mapbox Streets vector tiles are published to z16; higher zooms often return 404. */
+const MVT_PUBLISHED_MAX_Z = 16;
+
+function downsampleTileIndex(z, x, y, targetZ) {
+  if (z <= targetZ) return { z, x, y };
+  const d = z - targetZ;
+  return { z: targetZ, x: x >> d, y: y >> d };
 }
 
 function mvtPointToWorldXZ(tx, ty, z, localX, localY, extent, layout) {
@@ -164,33 +173,46 @@ export async function fetchLocationEnvironmentFeatures({ layout, signal }) {
 
   const { worldSizeMeters, zoom, cx, cy, half } = layout;
   const halfWorld = worldSizeMeters * 0.5 + 2;
-  const tasks = [];
+
+  const uniqueTiles = new Map();
   for (let row = -half; row <= half; row += 1) {
     for (let col = -half; col <= half; col += 1) {
       const tx = cx + col;
       const ty = cy + row;
-      const url = getMapboxStreetsV8TileUrl(zoom, tx, ty);
-      tasks.push(
-        fetch(url, { signal })
-          .then((res) => (res.ok ? res.arrayBuffer() : null))
-          .then((buf) => (buf ? parseTileToFeatures(buf, tx, ty, zoom, layout, halfWorld) : { buildings: [], treeZones: [] }))
-          .catch(() => ({ buildings: [], treeZones: [] })),
-      );
+      const down = downsampleTileIndex(zoom, tx, ty, MVT_PUBLISHED_MAX_Z);
+      const key = `${down.z}/${down.x}/${down.y}`;
+      if (!uniqueTiles.has(key)) uniqueTiles.set(key, down);
     }
   }
 
-  const parts = await Promise.all(tasks);
+  const bufferByKey = new Map();
+  await Promise.all(
+    [...uniqueTiles.entries()].map(async ([key, t]) => {
+      const url = getMapboxStreetsV8TileUrl(t.z, t.x, t.y);
+      try {
+        const res = await fetch(url, { signal });
+        const buf = res.ok ? await res.arrayBuffer() : null;
+        bufferByKey.set(key, buf);
+      } catch {
+        bufferByKey.set(key, null);
+      }
+    }),
+  );
+
   const buildings = [];
   const treeZones = [];
   const seen = new Set();
 
-  for (const p of parts) {
-    for (const b of p.buildings) {
+  for (const [key, t] of uniqueTiles) {
+    const buf = bufferByKey.get(key);
+    if (!buf) continue;
+    const parsed = parseTileToFeatures(buf, t.x, t.y, t.z, layout, halfWorld);
+    for (const b of parsed.buildings) {
       if (seen.has(b.key)) continue;
       seen.add(b.key);
       buildings.push(b);
     }
-    treeZones.push(...p.treeZones);
+    treeZones.push(...parsed.treeZones);
   }
 
   return { buildings, treeZones };

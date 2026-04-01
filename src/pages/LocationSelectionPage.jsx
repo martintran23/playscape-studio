@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import useLocationStore from "../store/locationStore";
-import { hasMapboxToken, searchLocationsWithMapbox } from "../services/geocoding";
+import { hasMapboxToken, searchLocationsWithMapbox, shouldSkipGeocodingQuery } from "../services/geocoding";
 
 const MOCK_LOCATIONS = [
   { name: "Golden Gate Park, San Francisco", latitude: 37.7694, longitude: -122.4862 },
@@ -45,6 +45,14 @@ function LocationSelectionPage() {
       setIsLoading(false);
       setErrorMessage("");
       setIsDropdownOpen(false);
+      return;
+    }
+
+    if (hasMapboxToken && shouldSkipGeocodingQuery(trimmed)) {
+      setSearchResults([]);
+      setIsLoading(false);
+      setErrorMessage("Enter a short place name (not URLs or pasted console text).");
+      setIsDropdownOpen(true);
       return;
     }
 
