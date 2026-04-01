@@ -180,10 +180,14 @@ export function buildEnvironmentMeshes({
     for (let i = 0; i < positions.length; i += 1) {
       const { x, z } = positions[i];
       const y = getTerrainHeightAt(terrainMesh, x, z) ?? 0;
-      const scale = 0.85 + hash01Local(i, 2) * 0.55;
+      const scale = 0.72 + hash01Local(i, 2) * 0.75;
       dummy.position.set(x, y, z);
+      dummy.rotation.set(
+        (hash01Local(i, 9) - 0.5) * 0.14,
+        hash01Local(i, 3) * Math.PI * 2 + (hash01Local(i, 8) - 0.5) * 0.4,
+        (hash01Local(i, 10) - 0.5) * 0.14,
+      );
       dummy.scale.setScalar(scale);
-      dummy.rotation.y = hash01Local(i, 3) * Math.PI * 2;
       dummy.updateMatrix();
       trunkInst.setMatrixAt(i, dummy.matrix);
       dummy.scale.setScalar(scale * (0.95 + hash01Local(i, 5) * 0.15));

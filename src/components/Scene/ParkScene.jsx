@@ -92,8 +92,22 @@ function ParkSceneContent({
       <color attach="background" args={["#f8fafc"]} />
       <fog attach="fog" args={["#d8ecff", fogNear, fogFar]} />
       <Sky distance={450000} sunPosition={[10, 12, 5]} inclination={0.5} azimuth={0.2} />
-      <ambientLight intensity={0.72} />
-      <directionalLight position={[16, 22, 10]} intensity={1.2} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+      <hemisphereLight skyColor="#eaf4ff" groundColor="#7a6f62" intensity={0.42} />
+      <ambientLight intensity={0.48} />
+      <directionalLight
+        castShadow
+        position={[28, 46, 18]}
+        intensity={1.35}
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-near={0.5}
+        shadow-camera-far={groundSize * 4.2}
+        shadow-camera-left={-groundSize * 0.62}
+        shadow-camera-right={groundSize * 0.62}
+        shadow-camera-top={groundSize * 0.62}
+        shadow-camera-bottom={-groundSize * 0.62}
+        shadow-bias={-0.00006}
+        shadow-normalBias={0.03}
+      />
       <BackdropSatellite
         centerLat={mapCenterLat ?? effectiveLocation.latitude}
         centerLng={mapCenterLng ?? effectiveLocation.longitude}

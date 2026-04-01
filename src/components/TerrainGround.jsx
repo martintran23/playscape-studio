@@ -7,18 +7,28 @@ import {
   getTerrainRgbTileUrlByXY,
 } from "../utils/mapboxTerrainService";
 import { sampleElevationBilinear } from "../utils/demSample";
+import { curveDisplacementMeters } from "../utils/terrainSurfaceEnhance";
+import { buildContourLineSegments } from "../utils/terrainContours";
 import useSceneStore from "../store/sceneStore";
 
 const NATIVE_TILE_PX = 256;
 
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`Failed to load image: ${url}`));
-    image.src = url;
-  });
+const USE_BASIC_TERRAIN_MATERIAL = import.meta.env.VITE_TERRAIN_DEBUG_BASIC === "1";
+
+/**
+ * Fetch tiles as ImageBitmap so 2D canvases stay CORS-clean: getImageData works for DEM,
+ * and CanvasTexture uploads reliably (avoids tainted-canvas black maps from HTMLImageElement).
+ */
+async function loadTileBitmap(url) {
+  if (!url) {
+    throw new Error("Empty tile URL — set VITE_MAPBOX_TOKEN (or VITE_MAPBOX_ACCESS_TOKEN).");
+  }
+  const res = await fetch(url, { mode: "cors", credentials: "omit", cache: "force-cache" });
+  if (!res.ok) {
+    throw new Error(`Tile HTTP ${res.status}: ${url.slice(0, 120)}`);
+  }
+  const blob = await res.blob();
+  return createImageBitmap(blob);
 }
 
 function fillDemTileFlat(demCtx, dx, dy, elevationMeters) {
@@ -49,11 +59,12 @@ function applyStitchUv(geometry, layout) {
   uv.needsUpdate = true;
 }
 
-function applyDisplacement(geometry, layout, demPayload, verticalExaggeration) {
+function applyDisplacement(geometry, layout, demPayload, verticalExaggeration, heightCurveExponent) {
   if (!demPayload || !geometry || !layout) return;
   const { data, width, height, baseElevation } = demPayload;
   const positions = geometry.attributes.position;
   const { pxRef, pyRef, canvasW, canvasH, worldSizeMeters: ws } = layout;
+  const curveExp = heightCurveExponent ?? 1;
   for (let vi = 0; vi < positions.count; vi += 1) {
     const vx = positions.getX(vi);
     const vz = positions.getZ(vi);
@@ -62,7 +73,10 @@ function applyDisplacement(geometry, layout, demPayload, verticalExaggeration) {
     const fx = Math.max(0, Math.min(width - 1, (px / canvasW) * (width - 1)));
     const fy = Math.max(0, Math.min(height - 1, (py / canvasH) * (height - 1)));
     const elev = sampleElevationBilinear(data, width, height, fx, fy);
-    positions.setY(vi, (elev - baseElevation) * verticalExaggeration);
+    positions.setY(
+      vi,
+      curveDisplacementMeters(elev - baseElevation, verticalExaggeration, curveExp),
+    );
   }
   positions.needsUpdate = true;
   geometry.computeVertexNormals();
@@ -83,7 +97,13 @@ function TerrainGround({
   const satTextureRef = useRef(null);
   const [satTexture, setSatTexture] = useState(null);
   const [demPayload, setDemPayload] = useState(null);
+  const bumpTerrainSurface = useSceneStore((state) => state.bumpTerrainSurface);
+  const terrainHeightCurveExponent = useSceneStore((state) => state.terrainHeightCurveExponent);
+  const terrainDebugContours = useSceneStore((state) => state.terrainDebugContours);
+  const terrainSurfaceEpoch = useSceneStore((state) => state.terrainSurfaceEpoch);
+  const [contourGeo, setContourGeo] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [stitchError, setStitchError] = useState(null);
   const setTerrainMesh = useSceneStore((state) => state.setTerrainMesh);
 
   const worldSizeMeters = stitchLayout?.worldSizeMeters;
@@ -93,6 +113,9 @@ function TerrainGround({
     const g = new THREE.PlaneGeometry(worldSizeMeters, worldSizeMeters, segments, segments);
     g.rotateX(-Math.PI / 2);
     applyStitchUv(g, stitchLayout);
+    if (import.meta.env.DEV && g.attributes.uv) {
+      console.log("[TerrainGround] geometry UVs", g.attributes.uv.count);
+    }
     return g;
   }, [worldSizeMeters, segments, stitchLayout]);
 
@@ -100,15 +123,17 @@ function TerrainGround({
     if (!layoutValid(stitchLayout) || !worldSizeMeters) {
       setDemPayload(null);
       setSatTexture(null);
+      setStitchError(null);
       setIsLoading(false);
       return undefined;
     }
 
     const { cx, cy, zoom, half, canvasW, canvasH } = stitchLayout;
-    let cancelled = false;
+    let alive = true;
 
     const run = async () => {
       setIsLoading(true);
+      setStitchError(null);
       setDemPayload(null);
       setSatTexture(null);
       if (satTextureRef.current) {
@@ -118,6 +143,15 @@ function TerrainGround({
 
       try {
         const z = zoom;
+        const sampleTx = cx;
+        const sampleTy = cy;
+        const sampleSatUrl = getSatelliteRasterTileUrl(z, sampleTx, sampleTy);
+        const sampleDemUrl = getTerrainRgbTileUrlByXY(z, sampleTx, sampleTy);
+        if (import.meta.env.DEV) {
+          console.log("[TerrainGround] sample satellite tile URL:", sampleSatUrl);
+          console.log("[TerrainGround] sample terrain-rgb tile URL:", sampleDemUrl);
+        }
+
         const satCanvas = document.createElement("canvas");
         satCanvas.width = canvasW;
         satCanvas.height = canvasH;
@@ -131,6 +165,7 @@ function TerrainGround({
         if (!demCtx) throw new Error("DEM canvas unavailable");
 
         const failedDemTiles = [];
+        let tileFailCount = 0;
 
         const tasks = [];
         for (let row = -half; row <= half; row += 1) {
@@ -144,16 +179,25 @@ function TerrainGround({
 
             tasks.push(
               (async () => {
+                let satBmp;
+                let demBmp;
                 try {
-                  const [satImg, demImg] = await Promise.all([loadImage(satUrl), loadImage(demUrl)]);
-                  if (cancelled) return;
-                  satCtx.drawImage(satImg, dx, dy, NATIVE_TILE_PX, NATIVE_TILE_PX);
-                  demCtx.drawImage(demImg, dx, dy, NATIVE_TILE_PX, NATIVE_TILE_PX);
-                } catch {
-                  if (cancelled) return;
+                  [satBmp, demBmp] = await Promise.all([loadTileBitmap(satUrl), loadTileBitmap(demUrl)]);
+                  if (!alive) return;
+                  satCtx.drawImage(satBmp, dx, dy, NATIVE_TILE_PX, NATIVE_TILE_PX);
+                  demCtx.drawImage(demBmp, dx, dy, NATIVE_TILE_PX, NATIVE_TILE_PX);
+                } catch (err) {
+                  tileFailCount += 1;
+                  if (import.meta.env.DEV && tileFailCount <= 3) {
+                    console.warn("[TerrainGround] tile failed, using placeholder:", err?.message ?? err);
+                  }
+                  if (!alive) return;
                   satCtx.fillStyle = "#5a6b52";
                   satCtx.fillRect(dx, dy, NATIVE_TILE_PX, NATIVE_TILE_PX);
                   failedDemTiles.push({ dx, dy });
+                } finally {
+                  satBmp?.close?.();
+                  demBmp?.close?.();
                 }
               })(),
             );
@@ -161,7 +205,7 @@ function TerrainGround({
         }
 
         await Promise.all(tasks);
-        if (cancelled) return;
+        if (!alive) return;
 
         let demPayloadNext = null;
         try {
@@ -184,44 +228,58 @@ function TerrainGround({
             baseElevation,
           };
         } catch (demErr) {
-          console.warn("TerrainGround: could not read DEM pixels (tainted canvas or browser policy). Showing satellite only, flat height.", demErr);
+          console.warn("TerrainGround: could not read DEM pixels.", demErr);
         }
 
-        const tex = new THREE.CanvasTexture(satCanvas);
-        tex.needsUpdate = true;
-        tex.wrapS = THREE.ClampToEdgeWrapping;
-        tex.wrapT = THREE.ClampToEdgeWrapping;
-        // Stitch sizes are not power-of-two (e.g. 9×256); mipmaps break sampling on many GPUs.
-        tex.generateMipmaps = false;
-        tex.minFilter = THREE.LinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        tex.anisotropy = 4;
-        tex.colorSpace = THREE.SRGBColorSpace;
-        if (cancelled) {
-          tex.dispose();
+        const configureSatelliteTexture = (texture) => {
+          texture.wrapS = THREE.ClampToEdgeWrapping;
+          texture.wrapT = THREE.ClampToEdgeWrapping;
+          texture.generateMipmaps = false;
+          texture.minFilter = THREE.LinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          texture.anisotropy = 4;
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.needsUpdate = true;
+          return texture;
+        };
+
+        const albedoTex = configureSatelliteTexture(new THREE.CanvasTexture(satCanvas));
+
+        if (!alive) {
+          albedoTex.dispose();
           return;
         }
-        satTextureRef.current = tex;
-        setSatTexture(tex);
+        satTextureRef.current = albedoTex;
+        setSatTexture(albedoTex);
+        if (import.meta.env.DEV) {
+          console.log("[TerrainGround] satellite albedo texture", albedoTex, {
+            tileFailures: tileFailCount,
+            demOk: Boolean(demPayloadNext?.data),
+          });
+        }
 
         setDemPayload(demPayloadNext);
+        if (tileFailCount === tasks.length) {
+          setStitchError(new Error("All Mapbox tiles failed — check token, network, and CORS."));
+        }
       } catch (error) {
-        if (!cancelled) {
+        if (alive) {
           console.error("TerrainGround stitch failed:", error);
+          setStitchError(error instanceof Error ? error : new Error(String(error)));
           setSatTexture(null);
           setDemPayload(null);
         }
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (alive) setIsLoading(false);
       }
     };
 
     run();
 
     return () => {
-      cancelled = true;
+      alive = false;
     };
-  }, [stitchLayout]);
+  }, [stitchLayout, worldSizeMeters]);
 
   useEffect(
     () => () => {
@@ -233,13 +291,33 @@ function TerrainGround({
     [],
   );
 
-  const bumpTerrainSurface = useSceneStore((state) => state.bumpTerrainSurface);
-
   useEffect(() => {
     if (!demPayload?.data || !geometry || !layoutValid(stitchLayout)) return;
-    applyDisplacement(geometry, stitchLayout, demPayload, verticalExaggeration);
+    applyDisplacement(geometry, stitchLayout, demPayload, verticalExaggeration, terrainHeightCurveExponent);
     bumpTerrainSurface();
-  }, [demPayload, geometry, stitchLayout, verticalExaggeration, bumpTerrainSurface]);
+  }, [
+    demPayload,
+    geometry,
+    stitchLayout,
+    verticalExaggeration,
+    bumpTerrainSurface,
+    terrainHeightCurveExponent,
+  ]);
+
+  useEffect(() => {
+    if (!terrainDebugContours || !geometry || !demPayload?.data) {
+      setContourGeo((prev) => {
+        if (prev) prev.dispose();
+        return null;
+      });
+      return;
+    }
+    const next = buildContourLineSegments(geometry, 11, 22000);
+    setContourGeo((prev) => {
+      if (prev) prev.dispose();
+      return next;
+    });
+  }, [terrainDebugContours, geometry, demPayload?.data, terrainSurfaceEpoch]);
 
   const bindMesh = (node) => {
     meshRef.current = node;
@@ -259,15 +337,36 @@ function TerrainGround({
 
   if (!geometry) return null;
 
+  const matKey = satTexture?.uuid ?? "sat-pending";
+  const fallbackColor = stitchError && !satTexture ? "#ef4444" : "#d1d5db";
+
   return (
     <group>
       <mesh ref={bindMesh} geometry={geometry} receiveShadow onClick={onPlaceObject}>
-        <meshStandardMaterial
-          key={satTexture ? satTexture.uuid : "sat-pending"}
-          map={satTexture ?? null}
-          color={satTexture ? "#ffffff" : "#d1d5db"}
-        />
+        {USE_BASIC_TERRAIN_MATERIAL ? (
+          <meshBasicMaterial
+            key={`${matKey}-basic`}
+            map={satTexture ?? undefined}
+            color={satTexture ? "#ffffff" : fallbackColor}
+            side={THREE.DoubleSide}
+          />
+        ) : (
+          <meshStandardMaterial
+            key={matKey}
+            map={satTexture ?? undefined}
+            color={satTexture ? "#ffffff" : fallbackColor}
+            roughness={0.88}
+            metalness={0.04}
+            envMapIntensity={0.45}
+            side={THREE.DoubleSide}
+          />
+        )}
       </mesh>
+      {contourGeo ? (
+        <lineSegments geometry={contourGeo} frustumCulled={false}>
+          <lineBasicMaterial color="#0f172a" transparent opacity={0.55} depthWrite={false} />
+        </lineSegments>
+      ) : null}
       {isLoading ? (
         <mesh position={[0, 2, 0]}>
           <sphereGeometry args={[0.25, 16, 16]} />

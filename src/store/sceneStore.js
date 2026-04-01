@@ -99,6 +99,13 @@ const useSceneStore = create((set, get) => ({
   bumpTerrainSurface: () => set((s) => ({ terrainSurfaceEpoch: s.terrainSurfaceEpoch + 1 })),
   terrainVerticalExaggeration: 1,
   setTerrainVerticalExaggeration: (value) => set({ terrainVerticalExaggeration: Math.max(0.25, Math.min(4, value)) }),
+  /** >1 exaggerates larger relief vs flats (visual only). */
+  terrainHeightCurveExponent: 1.16,
+  setTerrainHeightCurveExponent: (value) =>
+    set({ terrainHeightCurveExponent: Math.max(1, Math.min(1.45, value)) }),
+  /** Debug iso-contours on the draped terrain grid. */
+  terrainDebugContours: false,
+  setTerrainDebugContours: (value) => set({ terrainDebugContours: Boolean(value) }),
 
   setActiveModel: (modelId) => set({ activeModelId: modelId }),
   setTransformMode: (mode) => set({ transformMode: mode }),
