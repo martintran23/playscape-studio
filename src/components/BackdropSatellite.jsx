@@ -12,6 +12,8 @@ textureLoader.setCrossOrigin("anonymous");
 /**
  * Low, wide satellite plane under the stitched terrain so streets/buildings read past the tile edge.
  * Falls back to solid green when there is no token or the static image request fails.
+ *
+ * depthWrite=false so this never wins the depth test over displaced terrain (valleys can go below this Y).
  */
 export default function BackdropSatellite({ centerLat, centerLng, groundSize }) {
   const url = useMemo(() => {
@@ -86,17 +88,20 @@ export default function BackdropSatellite({ centerLat, centerLng, groundSize }) 
   const fallbackSize = Math.max(groundSize * 3.5, 160);
   const useFallback = !url || loadFailed || !texture;
 
+  /** Below typical exaggerated terrain dips so the plane is not coplanar with valleys. */
+  const y = Math.min(-4, -groundSize * 0.02);
+
   if (useFallback) {
     return (
-      <mesh position={[0, -0.45, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <mesh position={[0, y, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow renderOrder={-20}>
         <planeGeometry args={[fallbackSize, fallbackSize]} />
-        <meshStandardMaterial color="#7aa867" />
+        <meshStandardMaterial color="#7aa867" depthWrite={false} />
       </mesh>
     );
   }
 
   return (
-    <mesh position={[0, -0.45, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+    <mesh position={[0, y, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow renderOrder={-20}>
       <planeGeometry args={[planeSpan, planeSpan]} />
       <meshStandardMaterial
         key={texture.uuid}
@@ -104,6 +109,7 @@ export default function BackdropSatellite({ centerLat, centerLng, groundSize }) 
         color="#ffffff"
         roughness={0.95}
         metalness={0}
+        depthWrite={false}
       />
     </mesh>
   );
