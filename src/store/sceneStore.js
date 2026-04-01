@@ -94,6 +94,9 @@ const useSceneStore = create((set, get) => ({
   /** three.js terrain mesh for raycast height snapping */
   terrainMesh: null,
   setTerrainMesh: (mesh) => set({ terrainMesh: mesh }),
+  /** Incremented after terrain vertices are displaced so draped content re-raycasts to real Y. */
+  terrainSurfaceEpoch: 0,
+  bumpTerrainSurface: () => set((s) => ({ terrainSurfaceEpoch: s.terrainSurfaceEpoch + 1 })),
   terrainVerticalExaggeration: 1,
   setTerrainVerticalExaggeration: (value) => set({ terrainVerticalExaggeration: Math.max(0.25, Math.min(4, value)) }),
 

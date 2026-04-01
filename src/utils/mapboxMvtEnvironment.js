@@ -5,7 +5,17 @@ import { latLngToWorldXZ, tileFloatToLatLng } from "./stitchGeoreference";
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 
 /** Landuse types where we scatter tree instances (approximate canopy / park). */
-const TREE_LANDUSE_CLASSES = new Set(["wood", "forest", "scrub", "park", "national_park", "orchard"]);
+const TREE_LANDUSE_CLASSES = new Set([
+  "wood",
+  "forest",
+  "scrub",
+  "park",
+  "national_park",
+  "orchard",
+  "grass",
+  "cemetery",
+  "recreation_ground",
+]);
 
 export function getMapboxStreetsV8TileUrl(z, x, y) {
   if (!MAPBOX_TOKEN) {
@@ -112,14 +122,14 @@ function parseTileToFeatures(buffer, tx, ty, z, layout, halfWorld) {
 
       const heightM = parseHeightMeters(props);
       const minHM = parseMinHeightMeters(props);
-      if (heightM < 2) continue;
+      if (heightM < 1) continue;
 
       const outer = geoms[0].map((pt) => mvtPointToWorldXZ(tx, ty, z, pt.x, pt.y, extent, layout));
       const centroid = ringCentroid(outer.map((p) => ({ x: p.x, z: p.z })));
       if (Math.abs(centroid.x) > halfWorld || Math.abs(centroid.z) > halfWorld) continue;
 
       const area = ringAreaXZ(outer.map((p) => ({ x: p.x, z: p.z })));
-      if (area < 1.5) continue;
+      if (area < 0.45) continue;
 
       const holes = [];
       for (let r = 1; r < geoms.length; r += 1) {
@@ -154,13 +164,24 @@ function parseTileToFeatures(buffer, tx, ty, z, layout, halfWorld) {
       const centroid = ringCentroid(ring);
       if (Math.abs(centroid.x) > halfWorld * 1.05 || Math.abs(centroid.z) > halfWorld * 1.05) continue;
       const area = ringAreaXZ(ring);
-      if (area < 120) continue;
+      if (cls === "grass") {
+        if (area < 1800) continue;
+      } else if (area < 95) continue;
 
       treeZones.push({ outerRing: ring });
     }
   }
 
   return { buildings, treeZones };
+}
+
+function shuffleInPlaceDeterministic(arr) {
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(hash01(i, 1843 + i) * (i + 1));
+    const t = arr[i];
+    arr[i] = arr[j];
+    arr[j] = t;
+  }
 }
 
 /**
@@ -172,11 +193,14 @@ export async function fetchLocationEnvironmentFeatures({ layout, signal }) {
   }
 
   const { worldSizeMeters, zoom, cx, cy, half } = layout;
-  const halfWorld = worldSizeMeters * 0.5 + 2;
+  const TILE_FETCH_PAD = 2;
+  const tilesAcross = half * 2 + 1;
+  const metersPerTile = worldSizeMeters / Math.max(1, tilesAcross);
+  const halfWorld = worldSizeMeters * 0.5 + metersPerTile * TILE_FETCH_PAD + 14;
 
   const uniqueTiles = new Map();
-  for (let row = -half; row <= half; row += 1) {
-    for (let col = -half; col <= half; col += 1) {
+  for (let row = -half - TILE_FETCH_PAD; row <= half + TILE_FETCH_PAD; row += 1) {
+    for (let col = -half - TILE_FETCH_PAD; col <= half + TILE_FETCH_PAD; col += 1) {
       const tx = cx + col;
       const ty = cy + row;
       const down = downsampleTileIndex(zoom, tx, ty, MVT_PUBLISHED_MAX_Z);
@@ -215,6 +239,7 @@ export async function fetchLocationEnvironmentFeatures({ layout, signal }) {
     treeZones.push(...parsed.treeZones);
   }
 
+  shuffleInPlaceDeterministic(buildings);
   return { buildings, treeZones };
 }
 
@@ -228,8 +253,8 @@ export function hash01(ix, iz, salt) {
 /**
  * Scatter tree positions inside polygon rings (world XZ).
  */
-export function scatterTreePositions(treeZones, worldSizeMeters, { spacing = 7, maxInstances = 1600 } = {}) {
-  const half = worldSizeMeters * 0.5;
+export function scatterTreePositions(treeZones, worldSizeMeters, { spacing = 7, maxInstances = 4000 } = {}) {
+  const half = worldSizeMeters * 0.5 + Math.max(10, worldSizeMeters * 0.03);
   const out = [];
   let salt = 0;
 
@@ -253,7 +278,7 @@ export function scatterTreePositions(treeZones, worldSizeMeters, { spacing = 7, 
         if (!pointInPolygon(x, z, ring)) continue;
         const ix = Math.round(x * 10);
         const iz = Math.round(z * 10);
-        if (hash01(ix, iz, salt) > 0.42) continue;
+        if (hash01(ix, iz, salt) > 0.36) continue;
         out.push({ x, z });
         salt += 1;
       }

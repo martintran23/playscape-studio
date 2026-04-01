@@ -233,10 +233,13 @@ function TerrainGround({
     [],
   );
 
+  const bumpTerrainSurface = useSceneStore((state) => state.bumpTerrainSurface);
+
   useEffect(() => {
     if (!demPayload?.data || !geometry || !layoutValid(stitchLayout)) return;
     applyDisplacement(geometry, stitchLayout, demPayload, verticalExaggeration);
-  }, [demPayload, geometry, stitchLayout, verticalExaggeration]);
+    bumpTerrainSurface();
+  }, [demPayload, geometry, stitchLayout, verticalExaggeration, bumpTerrainSurface]);
 
   const bindMesh = (node) => {
     meshRef.current = node;

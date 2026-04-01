@@ -103,7 +103,8 @@ export function buildEnvironmentMeshes({
   const defaultGroundY = terrainMesh ? null : 0;
   const roofThickness = ROOF_THICK * Math.max(0.65, Math.min(1.2, verticalExaggeration));
 
-  const limit = Math.min(buildings.length, 900);
+  const limit = Math.min(buildings.length, 5000);
+  const terrainHalf = worldSizeMeters * 0.5 - 0.25;
   for (let i = 0; i < limit; i += 1) {
     const b = buildings[i];
     const minH = b.minHM * verticalExaggeration;
@@ -112,7 +113,10 @@ export function buildEnvironmentMeshes({
     const holes = b.holes.map((h) => h.map((p) => ({ x: p.x, z: p.z })));
     const cx = outer.reduce((s, p) => s + p.x, 0) / outer.length;
     const cz = outer.reduce((s, p) => s + p.z, 0) / outer.length;
-    const groundY = getTerrainHeightAt(terrainMesh, cx, cz) ?? defaultGroundY ?? 0;
+    /* Sample terrain toward stitched bounds so fringe footprints still sit on the mesh. */
+    const sampleX = THREE.MathUtils.clamp(cx, -terrainHalf, terrainHalf);
+    const sampleZ = THREE.MathUtils.clamp(cz, -terrainHalf, terrainHalf);
+    const groundY = getTerrainHeightAt(terrainMesh, sampleX, sampleZ) ?? defaultGroundY ?? 0;
     const baseLift = minH + groundY + BUILDING_BASE_BUMP;
 
     const gWall = extrudeFootprintGeometry(outer, holes, wallH);
@@ -154,7 +158,7 @@ export function buildEnvironmentMeshes({
     buildingMesh.receiveShadow = true;
   }
 
-  const positions = scatterTreePositions(treeZones, worldSizeMeters, { spacing: 6.5, maxInstances: 1600 });
+  const positions = scatterTreePositions(treeZones, worldSizeMeters, { spacing: 5.25, maxInstances: 4500 });
   let treeInstancedMesh = null;
 
   if (positions.length && terrainMesh) {
