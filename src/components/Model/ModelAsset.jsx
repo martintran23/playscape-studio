@@ -2,22 +2,49 @@ import { useGLTF } from "@react-three/drei";
 import { useMemo } from "react";
 import * as THREE from "three";
 
+function unionMeshWorldBox(root) {
+  const box = new THREE.Box3();
+  let hit = false;
+  root.updateMatrixWorld(true);
+  root.traverse((child) => {
+    if (!child.isMesh || !child.geometry) return;
+    const geom = child.geometry;
+    if (!geom.boundingBox) geom.computeBoundingBox();
+    const local = geom.boundingBox;
+    if (!local) return;
+    const wb = local.clone().applyMatrix4(child.matrixWorld);
+    if (!hit) {
+      box.copy(wb);
+      hit = true;
+    } else {
+      box.union(wb);
+    }
+  });
+  if (!hit) {
+    box.setFromObject(root);
+  }
+  return box;
+}
+
 /**
  * Loads a GLB and scales it to match the scene (meters).
- * GLBs from different sources use inconsistent units; `fitMaxDimensionMeters` uniformly scales
- * so the largest axis of the bounding box matches that many meters (× `scale` as fine-tune).
+ * Uses mesh-only bounds (skips lights/helpers that shrink the box) and prefers horizontal
+ * footprint over a single spurious tall axis so scale matches satellite imagery.
  */
 function ModelAsset({ modelPath, scale = 1, fitMaxDimensionMeters }) {
   const { scene } = useGLTF(modelPath);
   const object = useMemo(() => {
     const clone = scene.clone();
     clone.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(clone);
+    const box = unionMeshWorldBox(clone);
     const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
+    const footprint = Math.max(size.x, size.z);
+    /* Blend footprint with height so spurious tall colliders don’t dominate, but thin poles still scale. */
+    const refDim = Math.max(footprint, size.y * 0.35, 1e-8);
 
-    if (fitMaxDimensionMeters != null && Number.isFinite(fitMaxDimensionMeters) && maxDim > 1e-8) {
-      const uniform = (fitMaxDimensionMeters * scale) / maxDim;
+    if (fitMaxDimensionMeters != null && Number.isFinite(fitMaxDimensionMeters) && refDim > 1e-8) {
+      let uniform = (fitMaxDimensionMeters * scale) / refDim;
+      uniform = Math.min(Math.max(uniform, 1e-6), 800);
       clone.scale.setScalar(uniform);
     } else {
       clone.scale.setScalar(scale);

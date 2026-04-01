@@ -18,7 +18,7 @@ function disposeObject3D(root) {
  * Mapbox Streets vector tiles: real building footprints/heights + trees in forest/park landuse.
  * Uses the same stitch layout as TerrainGround so footprints sit on the orthophoto.
  */
-export default function LocationEnvironment3D({ stitchLayout, verticalExaggeration }) {
+export default function LocationEnvironment3D({ stitchLayout, verticalExaggeration, enabled = true }) {
   const terrainMesh = useSceneStore((s) => s.terrainMesh);
   const terrainSurfaceEpoch = useSceneStore((s) => s.terrainSurfaceEpoch);
   const groupRef = useRef(null);
@@ -26,6 +26,10 @@ export default function LocationEnvironment3D({ stitchLayout, verticalExaggerati
   const worldSizeMeters = stitchLayout?.worldSizeMeters ?? 0;
 
   useEffect(() => {
+    if (!enabled) {
+      setFeatures({ buildings: [], treeZones: [] });
+      return undefined;
+    }
     if (!stitchLayout) {
       setFeatures({ buildings: [], treeZones: [] });
       return undefined;
@@ -48,7 +52,7 @@ export default function LocationEnvironment3D({ stitchLayout, verticalExaggerati
       cancelled = true;
       ac.abort();
     };
-  }, [stitchLayout]);
+  }, [stitchLayout, enabled]);
 
   useEffect(() => {
     const group = groupRef.current;
@@ -62,7 +66,7 @@ export default function LocationEnvironment3D({ stitchLayout, verticalExaggerati
       }
     };
 
-    if (!terrainMesh) {
+    if (!enabled || !terrainMesh) {
       clearChildren();
       return undefined;
     }
@@ -82,7 +86,7 @@ export default function LocationEnvironment3D({ stitchLayout, verticalExaggerati
     return () => {
       clearChildren();
     };
-  }, [features, terrainMesh, verticalExaggeration, worldSizeMeters, terrainSurfaceEpoch]);
+  }, [enabled, features, terrainMesh, verticalExaggeration, worldSizeMeters, terrainSurfaceEpoch]);
 
   return <group ref={groupRef} />;
 }

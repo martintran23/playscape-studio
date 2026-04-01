@@ -1,5 +1,7 @@
+import { useNavigate } from "react-router-dom";
 import useSceneStore from "../../store/sceneStore";
 import useLocationStore from "../../store/locationStore";
+import { buildFocusStitchFromWorldPolygon } from "../../utils/focusRegion";
 
 function modelFileLabel(modelPath) {
   const base = modelPath.split("/").pop() ?? modelPath;
@@ -10,7 +12,8 @@ function modelFileLabel(modelPath) {
   }
 }
 
-function ModelLibraryPanel() {
+function ModelLibraryPanel({ variant = "park" }) {
+  const navigate = useNavigate();
   const models = useSceneStore((state) => state.models);
   const activeModelId = useSceneStore((state) => state.activeModelId);
   const setActiveModel = useSceneStore((state) => state.setActiveModel);
@@ -24,18 +27,95 @@ function ModelLibraryPanel() {
   const selectedLocation = useLocationStore((state) => state.selectedLocation);
   const terrainVerticalExaggeration = useSceneStore((state) => state.terrainVerticalExaggeration);
   const setTerrainVerticalExaggeration = useSceneStore((state) => state.setTerrainVerticalExaggeration);
+  const areaSelectionActive = useSceneStore((state) => state.areaSelectionActive);
+  const setAreaSelectionActive = useSceneStore((state) => state.setAreaSelectionActive);
+  const selectedAreaPoints = useSceneStore((state) => state.selectedAreaPoints);
+  const selectedAreaClosed = useSceneStore((state) => state.selectedAreaClosed);
+  const setSelectedAreaClosed = useSceneStore((state) => state.setSelectedAreaClosed);
+  const resetSelectedArea = useSceneStore((state) => state.resetSelectedArea);
+  const lastStitchLayout = useSceneStore((state) => state.lastStitchLayout);
+  const setFocusDesign = useSceneStore((state) => state.setFocusDesign);
+
+  const isPark = variant === "park";
+  const canFinish = selectedAreaPoints.length >= 3 && !selectedAreaClosed;
+  const canEnterFocus =
+    selectedAreaClosed && selectedAreaPoints.length >= 3 && lastStitchLayout;
+
+  const handleToggleAreaMode = () => {
+    if (areaSelectionActive) {
+      resetSelectedArea();
+    }
+    setAreaSelectionActive(!areaSelectionActive);
+  };
+
+  const handleFinishOutline = () => {
+    if (canFinish) setSelectedAreaClosed(true);
+  };
+
+  const handleEnterFocus = () => {
+    if (!canEnterFocus) return;
+    const fd = buildFocusStitchFromWorldPolygon(lastStitchLayout, selectedAreaPoints);
+    if (!fd) return;
+    setFocusDesign(fd);
+    navigate("/focus-editor");
+  };
 
   return (
-    <aside className="w-72 border-r border-slate-200 bg-white p-4">
+    <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col border-r border-slate-200 bg-white">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain p-4">
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-slate-900">PlayScape Studio</h1>
-        <p className="mt-1 text-sm text-slate-500">Choose a model, then click ground to place.</p>
+        <p className="mt-1 text-sm text-slate-500">
+          {isPark ? "Choose a model, then click ground to place." : "Place equipment inside the highlighted region only."}
+        </p>
         {selectedLocation ? (
           <p className="mt-2 rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">
             {selectedLocation.name} ({selectedLocation.latitude.toFixed(3)}, {selectedLocation.longitude.toFixed(3)})
           </p>
         ) : null}
       </div>
+
+      {isPark ? (
+        <section className="mb-6 rounded-lg border border-amber-200 bg-amber-50/80 p-3">
+          <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-amber-900/80">Area selection</h2>
+          <p className="text-xs text-amber-900/70">
+            Turn on, click terrain to add corners. Click near the orange marker or use Finish to close.
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={handleToggleAreaMode}
+              className={`rounded-md px-3 py-2 text-sm font-medium ${
+                areaSelectionActive ? "bg-amber-600 text-white" : "bg-white text-amber-900 ring-1 ring-amber-300"
+              }`}
+            >
+              {areaSelectionActive ? "Stop selecting" : "Select area"}
+            </button>
+            <button
+              type="button"
+              onClick={handleFinishOutline}
+              disabled={!canFinish}
+              className="rounded-md bg-white px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Finish selection
+            </button>
+            <button
+              type="button"
+              onClick={handleEnterFocus}
+              disabled={!canEnterFocus}
+              className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              Enter design mode
+            </button>
+          </div>
+          {selectedAreaPoints.length > 0 ? (
+            <p className="mt-2 text-xs text-amber-900/80">
+              Points: {selectedAreaPoints.length}
+              {selectedAreaClosed ? " · closed" : ""}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section>
         <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-500">Model Library</h2>
@@ -132,6 +212,7 @@ function ModelLibraryPanel() {
         </div>
         <p className="mt-3 text-xs text-slate-500">Snap: 0.5m translate, 22.5deg rotate. Items cannot overlap and must stay in bounds.</p>
       </section>
+      </div>
     </aside>
   );
 }

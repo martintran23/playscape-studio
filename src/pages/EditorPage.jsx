@@ -24,12 +24,14 @@ function EditorPage() {
   }
 
   return (
-    <main className="page-enter flex h-full w-full">
+    <main className="page-enter flex h-full min-h-0 w-full">
       <ModelLibraryPanel />
-      <section className="flex-1">
-        <Suspense fallback={<div className="grid h-full place-items-center text-slate-500">Loading 3D editor...</div>}>
-          <ParkScene location={selectedLocation} initialCameraPosition={cameraPosition} />
-        </Suspense>
+      <section className="min-h-0 min-w-0 flex-1">
+        <div className="h-full min-h-0 w-full">
+          <Suspense fallback={<div className="grid h-full place-items-center text-slate-500">Loading 3D editor...</div>}>
+            <ParkScene location={selectedLocation} initialCameraPosition={cameraPosition} />
+          </Suspense>
+        </div>
       </section>
     </main>
   );

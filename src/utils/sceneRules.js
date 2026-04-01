@@ -5,13 +5,25 @@ const MIN_GAP = 0.15;
 
 const snapValue = (value, step) => Math.round(value / step) * step;
 
-export function normalizeTransform({ position, rotation, translationSnap, rotationSnap, boundaryLimit = BOUNDARY_LIMIT }) {
-  const snappedX = snapValue(position[0], translationSnap);
-  const snappedZ = snapValue(position[2], translationSnap);
+export function normalizeTransform({
+  position,
+  rotation,
+  translationSnap,
+  rotationSnap,
+  boundaryLimit = BOUNDARY_LIMIT,
+  skipTranslationSnap = false,
+  skipBoundaryClamp = false,
+}) {
+  const snappedX = skipTranslationSnap ? position[0] : snapValue(position[0], translationSnap);
+  const snappedZ = skipTranslationSnap ? position[2] : snapValue(position[2], translationSnap);
   const snappedY = position[1] ?? 0;
 
-  const clampedX = Math.max(-boundaryLimit, Math.min(boundaryLimit, snappedX));
-  const clampedZ = Math.max(-boundaryLimit, Math.min(boundaryLimit, snappedZ));
+  const clampedX = skipBoundaryClamp
+    ? snappedX
+    : Math.max(-boundaryLimit, Math.min(boundaryLimit, snappedX));
+  const clampedZ = skipBoundaryClamp
+    ? snappedZ
+    : Math.max(-boundaryLimit, Math.min(boundaryLimit, snappedZ));
   const snappedRy = snapValue(rotation[1] ?? 0, rotationSnap);
 
   return {
@@ -20,9 +32,21 @@ export function normalizeTransform({ position, rotation, translationSnap, rotati
   };
 }
 
-export function canPlaceAt({ candidatePosition, candidateRadius, objects, modelById, boundaryLimit = BOUNDARY_LIMIT }) {
+export function canPlaceAt({
+  candidatePosition,
+  candidateRadius,
+  objects,
+  modelById,
+  boundaryLimit = BOUNDARY_LIMIT,
+  polygonConstraint = null,
+  pointInPolygonFn = null,
+}) {
   const [x, , z] = candidatePosition;
-  if (Math.abs(x) > boundaryLimit || Math.abs(z) > boundaryLimit) {
+
+  if (polygonConstraint?.length >= 3 && typeof pointInPolygonFn === "function") {
+    /* Center inside polygon; overlap checks still use full radii. Ring test was too strict vs mesh/FP error. */
+    if (!pointInPolygonFn(x, z, polygonConstraint, 0)) return false;
+  } else if (Math.abs(x) > boundaryLimit || Math.abs(z) > boundaryLimit) {
     return false;
   }
 
