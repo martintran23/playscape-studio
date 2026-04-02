@@ -126,9 +126,6 @@ function ParkSceneContent({
       addSelectedAreaPoint({ x, y, z });
       return;
     }
-    if (isPark && areaSelectionActive && selectedAreaClosed) {
-      return;
-    }
 
     const geoPosition = worldXZToLatLng(stitchLayout, event.point.x, event.point.z);
     const y = getTerrainHeightAt(terrainMesh, event.point.x, event.point.z) ?? event.point.y;

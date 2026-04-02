@@ -160,12 +160,13 @@ const useSceneStore = create((set, get) => ({
       const model = state.models.find((entry) => entry.id === modelId);
       if (!model) return state;
 
-      const isFocus = state.placementContext === "focus";
-      const boundary =
-        isFocus && state.focusDesign?.groundSize
-          ? state.focusDesign.groundSize * 0.52
-          : state.boundaryLimit;
-      const polygonConstraint = isFocus ? state.focusPlacementPolygon : null;
+      /* Placement UI exists only in focused design mode — ignore clicks on main editor. */
+      if (state.placementContext !== "focus") {
+        return { ...state, selectedObjectId: null };
+      }
+
+      const boundary = state.focusDesign?.groundSize ? state.focusDesign.groundSize * 0.52 : state.boundaryLimit;
+      const polygonConstraint = state.focusPlacementPolygon;
 
       const transform = normalizeTransform({
         position,
@@ -173,15 +174,14 @@ const useSceneStore = create((set, get) => ({
         translationSnap: state.translationSnap,
         rotationSnap: state.rotationSnap,
         boundaryLimit: boundary,
-        skipTranslationSnap: isFocus,
-        skipBoundaryClamp: isFocus,
+        skipTranslationSnap: true,
+        skipBoundaryClamp: true,
       });
 
-      const objects = isFocus ? state.focusPlacedObjects : state.placedObjects;
       const isAllowed = canPlaceAt({
         candidatePosition: transform.position,
         candidateRadius: model.radius,
-        objects,
+        objects: state.focusPlacedObjects,
         modelById: Object.fromEntries(state.models.map((entry) => [entry.id, entry])),
         boundaryLimit: boundary,
         polygonConstraint,
@@ -200,17 +200,9 @@ const useSceneStore = create((set, get) => ({
         geoPosition,
       };
 
-      if (isFocus) {
-        return {
-          ...state,
-          focusPlacedObjects: [...state.focusPlacedObjects, newObject],
-          selectedObjectId: newObject.id,
-        };
-      }
-
       return {
         ...state,
-        placedObjects: [...state.placedObjects, newObject],
+        focusPlacedObjects: [...state.focusPlacedObjects, newObject],
         selectedObjectId: newObject.id,
       };
     }),
@@ -226,7 +218,13 @@ const useSceneStore = create((set, get) => ({
         isFocus && state.focusDesign?.groundSize
           ? state.focusDesign.groundSize * 0.52
           : state.boundaryLimit;
-      const polygonConstraint = isFocus ? state.focusPlacementPolygon : null;
+
+      let polygonConstraint = null;
+      if (isFocus) {
+        polygonConstraint = state.focusPlacementPolygon;
+      } else if (state.selectedAreaClosed && state.selectedAreaPoints.length >= 3) {
+        polygonConstraint = state.selectedAreaPoints.map((p) => ({ x: p.x, z: p.z }));
+      }
 
       const next = objects.map((object) => {
         if (object.id !== id) return object;
