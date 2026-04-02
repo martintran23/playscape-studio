@@ -1,5 +1,7 @@
 import { latLngToTile } from "./mapboxTerrainService";
 
+/** Ground-plane units: see `constants/geoscene.js` (`METERS_PER_WORLD_UNIT`). */
+
 /**
  * Fractional slippy tile (same projection as Mapbox raster / MVT).
  */

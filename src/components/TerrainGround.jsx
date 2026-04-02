@@ -110,6 +110,7 @@ function TerrainGround({
 
   const geometry = useMemo(() => {
     if (!layoutValid(stitchLayout)) return null;
+    /* Edge length must equal stitchLayout.worldSizeMeters (tileGrid × slippy tile meters) for true meter mapping. */
     const g = new THREE.PlaneGeometry(worldSizeMeters, worldSizeMeters, segments, segments);
     g.rotateX(-Math.PI / 2);
     applyStitchUv(g, stitchLayout);

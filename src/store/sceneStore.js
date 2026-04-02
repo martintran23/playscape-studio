@@ -53,8 +53,8 @@ const MODEL_LIBRARY = [
     name: "Jungle gym",
     modelPath: publicModel("Jungle gym.glb"),
     color: "#a855f7",
-    fitMaxDimensionMeters: 7.5,
-    radius: 3.2,
+    fitMaxDimensionMeters: 5,
+    radius: 2.2,
     scale: 1,
   },
   {
@@ -62,8 +62,8 @@ const MODEL_LIBRARY = [
     name: "Play structure",
     modelPath: publicModel("Play Structure.glb"),
     color: "#eab308",
-    fitMaxDimensionMeters: 10,
-    radius: 4.5,
+    fitMaxDimensionMeters: 12,
+    radius: 5.2,
     scale: 1,
   },
   {
@@ -71,8 +71,8 @@ const MODEL_LIBRARY = [
     name: "Basketball court",
     modelPath: publicModel("Basketball court.glb"),
     color: "#ea580c",
-    fitMaxDimensionMeters: 17,
-    radius: 9,
+    fitMaxDimensionMeters: 26,
+    radius: 13,
     scale: 1,
   },
 ];

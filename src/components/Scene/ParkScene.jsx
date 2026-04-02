@@ -15,8 +15,10 @@ import LocationEnvironment3D from "../LocationEnvironment3D";
 import BackdropSatellite from "../BackdropSatellite";
 import FocusRegionVeil from "../FocusRegionVeil";
 import FocusCameraIntro from "./FocusCameraIntro";
+import ScaleReferenceCube from "./ScaleReferenceCube";
 
 const MAP_ZOOM = 18;
+const DEBUG_SCALE_CUBE = import.meta.env.VITE_DEBUG_SCALE_CUBE === "1";
 const NATIVE_TILE_PX = 256;
 const CLOSE_RING_M = 2.85;
 
@@ -224,14 +226,16 @@ function ParkSceneContent({
         <PlacedObject key={object.id} object={object} model={modelById[object.modelId]} />
       ))}
 
+      {DEBUG_SCALE_CUBE ? <ScaleReferenceCube /> : null}
+
       <OrbitControls
         ref={orbitRef}
         makeDefault
         enablePan
         enableZoom
         enableRotate
-        minDistance={4}
-        maxDistance={800}
+        minDistance={isFocus ? 2.5 : 4}
+        maxDistance={isFocus ? Math.max(96, groundSize * 1.35) : 800}
       />
       {variant === "focus" ? <FocusCameraIntro orbitRef={orbitRef} groundSize={groundSize} enabled /> : null}
     </>

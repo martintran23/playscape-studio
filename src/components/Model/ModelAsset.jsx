@@ -27,9 +27,9 @@ function unionMeshWorldBox(root) {
 }
 
 /**
- * Loads a GLB and scales it to match the scene (meters).
- * Uses mesh-only bounds (skips lights/helpers that shrink the box) and prefers horizontal
- * footprint over a single spurious tall axis so scale matches satellite imagery.
+ * Loads a GLB and scales it to match the scene.
+ * Target size is always `fitMaxDimensionMeters` (real meters); independent of focus vs main
+ * or terrain extent — assumes `METERS_PER_WORLD_UNIT` in `constants/geoscene.js`.
  */
 function ModelAsset({ modelPath, scale = 1, fitMaxDimensionMeters }) {
   const { scene } = useGLTF(modelPath);
@@ -49,6 +49,10 @@ function ModelAsset({ modelPath, scale = 1, fitMaxDimensionMeters }) {
     } else {
       clone.scale.setScalar(scale);
     }
+    clone.updateMatrixWorld(true);
+    const grounded = unionMeshWorldBox(clone);
+    clone.position.y = -grounded.min.y;
+    clone.updateMatrixWorld(true);
     return clone;
   }, [scene, scale, fitMaxDimensionMeters]);
 
