@@ -98,6 +98,9 @@ const useSceneStore = create((set, get) => ({
   /** three.js terrain mesh for raycast height snapping */
   terrainMesh: null,
   setTerrainMesh: (mesh) => set({ terrainMesh: mesh }),
+  /** Building/tree group from LocationEnvironment3D — for address pin roof raycast */
+  environmentRootForRaycast: null,
+  setEnvironmentRootForRaycast: (obj) => set({ environmentRootForRaycast: obj }),
   /** Incremented after terrain vertices are displaced so draped content re-raycasts to real Y. */
   terrainSurfaceEpoch: 0,
   bumpTerrainSurface: () => set((s) => ({ terrainSurfaceEpoch: s.terrainSurfaceEpoch + 1 })),

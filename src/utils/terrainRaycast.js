@@ -15,3 +15,16 @@ export function getTerrainHeightAt(mesh, x, z) {
   if (!hits.length) return null;
   return hits[0].point.y;
 }
+
+/**
+ * Highest surface below (x,z): vertical ray from above hits roofs/terrain first (Mapbox env + terrain).
+ */
+export function getTopSurfaceHeightAt(x, z, roots) {
+  const list = (roots || []).filter(Boolean);
+  if (!list.length) return null;
+  _origin.set(x, 1e6, z);
+  _raycaster.set(_origin, _dir);
+  const hits = _raycaster.intersectObjects(list, true);
+  if (!hits.length) return null;
+  return hits[0].point.y;
+}

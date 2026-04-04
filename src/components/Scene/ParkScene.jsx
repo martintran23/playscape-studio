@@ -192,7 +192,7 @@ function ParkSceneContent({
         onLoadStateChange={setTerrainLoading}
         onPlaceObject={onTerrainPointer}
       />
-      <AddressLocationMarker stitchLayout={stitchLayout} />
+      <AddressLocationMarker stitchLayout={stitchLayout} visible={!isFocus} />
       {isFocus && focusPolygonLocal?.length >= 3 ? (
         <>
           <FocusRegionVeil

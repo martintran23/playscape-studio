@@ -21,6 +21,7 @@ function disposeObject3D(root) {
 export default function LocationEnvironment3D({ stitchLayout, verticalExaggeration, enabled = true }) {
   const terrainMesh = useSceneStore((s) => s.terrainMesh);
   const terrainSurfaceEpoch = useSceneStore((s) => s.terrainSurfaceEpoch);
+  const setEnvironmentRootForRaycast = useSceneStore((s) => s.setEnvironmentRootForRaycast);
   const groupRef = useRef(null);
   const [features, setFeatures] = useState({ buildings: [], treeZones: [] });
   const worldSizeMeters = stitchLayout?.worldSizeMeters ?? 0;
@@ -68,6 +69,7 @@ export default function LocationEnvironment3D({ stitchLayout, verticalExaggerati
 
     if (!enabled || !terrainMesh) {
       clearChildren();
+      setEnvironmentRootForRaycast(null);
       return undefined;
     }
 
@@ -82,11 +84,21 @@ export default function LocationEnvironment3D({ stitchLayout, verticalExaggerati
     clearChildren();
     if (buildingMesh) group.add(buildingMesh);
     if (treeGroup) group.add(treeGroup);
+    setEnvironmentRootForRaycast(group);
 
     return () => {
       clearChildren();
+      setEnvironmentRootForRaycast(null);
     };
-  }, [enabled, features, terrainMesh, verticalExaggeration, worldSizeMeters, terrainSurfaceEpoch]);
+  }, [
+    enabled,
+    features,
+    terrainMesh,
+    verticalExaggeration,
+    worldSizeMeters,
+    terrainSurfaceEpoch,
+    setEnvironmentRootForRaycast,
+  ]);
 
   return <group ref={groupRef} />;
 }
