@@ -16,6 +16,7 @@ import BackdropSatellite from "../BackdropSatellite";
 import FocusRegionVeil from "../FocusRegionVeil";
 import FocusCameraIntro from "./FocusCameraIntro";
 import ScaleReferenceCube from "./ScaleReferenceCube";
+import AddressLocationMarker from "../AddressLocationMarker";
 
 const MAP_ZOOM = 18;
 const DEBUG_SCALE_CUBE = import.meta.env.VITE_DEBUG_SCALE_CUBE === "1";
@@ -191,6 +192,7 @@ function ParkSceneContent({
         onLoadStateChange={setTerrainLoading}
         onPlaceObject={onTerrainPointer}
       />
+      <AddressLocationMarker stitchLayout={stitchLayout} />
       {isFocus && focusPolygonLocal?.length >= 3 ? (
         <>
           <FocusRegionVeil
